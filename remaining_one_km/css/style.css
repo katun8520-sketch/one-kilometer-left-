@@ -1,0 +1,165 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #f1ede4;
+  font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; overscroll-behavior: none; }
+#app { position: fixed; inset: 0; overflow: hidden; }
+#c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transition: filter .25s ease; }
+#view { position: absolute; inset: 0; overflow: hidden; transition: filter .25s ease; }
+#view.bw { filter: grayscale(1) contrast(1.18) brightness(.95); }
+#ckwrap, #peekfg, #hand { position: absolute; pointer-events: none; will-change: transform; }
+#ckwrap { }
+#cockpit { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+#ckleft { position: absolute; right: calc(100% - 2px); top: 0; width: 120vw; height: 100%; background: #191415; }
+#ckfloor { position: absolute; left: -60%; width: 220%; top: calc(100% - 2px); height: 120vh;
+  background: linear-gradient(180deg, #2a2224 0%, #1b1617 30%, #0e0b0b 100%); }
+#peekfg { right: 0; bottom: 0; width: 72vw; max-width: 1000px; opacity: 0; }
+#hand { display: none; filter: drop-shadow(0 0 1px #000); }
+#muzzle { position: absolute; width: 150px; height: 150px; margin: -75px 0 0 -75px; display: none; pointer-events: none; mix-blend-mode: screen;
+  background: radial-gradient(circle, #fff 0 12%, #ffd36a 22%, rgba(255,140,0,.6) 40%, transparent 68%); }
+#muzzle.laser { background: radial-gradient(circle, #fff 0 12%, #8ff 24%, rgba(0,220,255,.6) 42%, transparent 70%); }
+#closeup { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; background: rgba(0,0,0,.35); }
+#closeup.show { display: flex; }
+#closeup img { width: 86vw; max-height: 84vh; object-fit: cover; border: 7px solid #f2efe6; outline: 5px solid #000; box-shadow: 12px 12px 0 #000;
+  animation: closeup 1.15s cubic-bezier(.2,.9,.3,1) forwards; }
+#closeup.laser img { border-color: #bff; box-shadow: 12px 12px 0 #000, 0 0 40px #3ff; }
+
+@keyframes closeup { 0% { transform: scale(1.6) rotate(-6deg); opacity: 0 } 12% { transform: scale(.98) rotate(-2deg); opacity: 1 } 20% { transform: scale(1.02) rotate(-1.5deg) translate(6px,-4px) }
+  28% { transform: scale(1) rotate(-1deg) translate(-5px,3px) } 80% { transform: scale(1.04) rotate(-1deg); opacity: 1 } 100% { transform: scale(1.08) rotate(-1deg); opacity: 0 } }
+.hidden { display: none !important; }
+body.peek:not(.touch) #app { cursor: none; }
+
+/* 漫畫質感：暗角 + 顆粒 */
+#vignette { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%); }
+#grain { position: absolute; inset: -50%; pointer-events: none; opacity: .09; mix-blend-mode: overlay;
+  background-image: repeating-radial-gradient(circle at 17% 32%, #fff 0 1px, transparent 1px 3px), repeating-radial-gradient(circle at 71% 63%, #000 0 1px, transparent 1px 4px);
+  animation: grain .5s steps(3) infinite; }
+@keyframes grain { 0% { transform: translate(0,0) } 33% { transform: translate(-2%,1%) } 66% { transform: translate(1%,-2%) } }
+
+/* HUD */
+#hud { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: none; }
+.hud-box { background: rgba(14,14,16,.78); border: 3px solid #0a0a0a; outline: 2px solid #d9d4c8; padding: 4px 12px; display: flex; align-items: baseline; gap: 6px;
+  transform: skewX(-6deg); box-shadow: 4px 4px 0 #000; }
+.hud-box b { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+.hud-box .lbl, .hud-box .u { font-size: 13px; color: #c8c2b4; }
+.hud-box.danger { outline-color: #e2412d; }
+.hud-box.danger b { color: #ff5a43; }
+#warn { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); color: #ffdf5a; font-weight: 900; font-size: 20px;
+  -webkit-text-stroke: 1px #000; text-shadow: 2px 2px 0 #000; animation: blinkw .4s steps(2) infinite; pointer-events: none; }
+@keyframes blinkw { 50% { opacity: .3 } }
+
+/* 文字 */
+#toast, #subtitle, #bigText { position: absolute; left: 50%; pointer-events: none; text-align: center; opacity: 0; transition: opacity .25s, transform .25s; }
+#toast { top: 22%; transform: translate(-50%, -10px) rotate(-2deg); max-width: 88vw; font-size: clamp(20px, 3.4vw, 34px); font-weight: 900; color: #fff;
+  background: #c4271c; padding: 10px 22px; border: 4px solid #000; box-shadow: 6px 6px 0 #000; }
+#toast.show { opacity: 1; transform: translate(-50%, 0) rotate(-2deg); }
+#subtitle { bottom: 18%; transform: translateX(-50%); font-size: clamp(24px, 4vw, 40px); font-weight: 900; color: #fff; text-shadow: 0 0 8px #000, 2px 2px 0 #000; }
+#subtitle.show { opacity: 1; }
+#bigText { top: 40%; transform: translate(-50%, -50%) scale(.8); font-size: clamp(44px, 9vw, 96px); font-weight: 900; color: #fff;
+  -webkit-text-stroke: 3px #000; text-shadow: 6px 6px 0 #000; letter-spacing: 4px; white-space: nowrap; }
+#bigText.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+#bigText.hard { color: #ff5a43; }
+
+/* 插隊標籤 */
+#tags { position: absolute; inset: 0; pointer-events: none; }
+.tag { position: absolute; left: 0; top: 0; font-weight: 900; font-size: 15px; padding: 3px 9px; border: 3px solid #000; white-space: nowrap; box-shadow: 3px 3px 0 #000; }
+.tag.cutting { background: #ffb21c; color: #000; animation: blinkw .55s steps(2) infinite; }
+.tag.fail { background: #222; color: #ddd; text-decoration: line-through; }
+.tag.ok { background: #c4271c; color: #fff; }
+
+/* 準星、特效 */
+#crosshair { position: absolute; left: 0; top: 0; width: 72px; height: 72px; pointer-events: none; display: none; filter: drop-shadow(0 0 2px #000); }
+#fx { position: absolute; inset: 0; pointer-events: none; }
+.pow { position: absolute; width: 220px; height: 220px; margin: -110px 0 0 -110px; background: url(../assets/pow.png) center/contain no-repeat; animation: pow .85s ease-out forwards; }
+.pow.laser { filter: hue-rotate(160deg) saturate(3) drop-shadow(0 0 18px #4ff); width: 300px; height: 300px; margin: -150px 0 0 -150px; }
+@keyframes pow { 0% { transform: scale(.2) rotate(-12deg); opacity: 1 } 18% { transform: scale(1.15) rotate(4deg) } 30% { transform: scale(1) rotate(0) } 75% { opacity: 1 } 100% { transform: scale(1.08); opacity: 0 } }
+.spark { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: radial-gradient(#fff, #ffd060 40%, transparent 70%); animation: spark .3s ease-out forwards; }
+@keyframes spark { to { transform: scale(2); opacity: 0 } }
+
+/* 觸控按鈕 */
+#controls { position: absolute; inset: 0; pointer-events: none; }
+.pad { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; align-items: flex-end; gap: 12px; }
+.pad.left { left: max(18px, env(safe-area-inset-left)); }
+.pad.right { right: max(18px, env(safe-area-inset-right)); }
+.cbtn { pointer-events: auto; position: relative; width: 92px; height: 92px; border: 0; padding: 0; background: none; touch-action: none; }
+.cbtn img { width: 100%; height: 100%; display: block; pointer-events: none; filter: drop-shadow(3px 3px 0 #000); transition: transform .06s; }
+.cbtn span { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); font-size: 13px; font-weight: 900; color: #fff; background: #000; padding: 1px 6px; pointer-events: none; }
+.cbtn.on img { transform: scale(.88); filter: drop-shadow(1px 1px 0 #000) brightness(1.25); }
+.cbtn.gas { width: 104px; height: 104px; }
+#btnPeek { width: 112px; height: 112px; }
+.cbtn.fire { position: absolute; right: 30px; bottom: 128px; width: 112px; height: 112px; display: none; }
+body.peek .cbtn.fire { display: block; }
+#keysHint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 14px; color: #ddd; background: rgba(0,0,0,.55); padding: 6px 14px; border: 2px solid #000; pointer-events: none; }
+#keysHint b { color: #ffb21c; }
+#btnSkip { position: absolute; right: max(16px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top)); font: inherit; font-weight: 900; font-size: 16px;
+  background: rgba(0,0,0,.6); color: #fff; border: 3px solid #fff; padding: 6px 14px; }
+
+/* 漫畫格（結局插圖） */
+#panel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); opacity: 0; pointer-events: none; transition: opacity .9s ease; }
+#panel.show { opacity: 1; }
+#panel.instant { transition: none; }
+#panel.shake img { animation: pshake .08s linear infinite; }
+@keyframes pshake { 0% { transform: translate(-14px, 8px) rotate(-2deg) scale(1.06) } 50% { transform: translate(12px, -10px) rotate(1deg) scale(1.08) } 100% { transform: translate(-8px, 12px) rotate(-1deg) scale(1.06) } }
+#panel.instant img { transition: none; transform: rotate(-1deg) scale(1.02); }
+#panel img { max-width: 92vw; max-height: 86vh; border: 8px solid #f2efe6; outline: 5px solid #000; box-shadow: 14px 14px 0 #000; transform: rotate(-1.5deg) scale(.96); transition: transform 2.5s ease-out; }
+#panel.show img { transform: rotate(-1deg) scale(1.02); }
+#flash, #fade { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+#fade { background: #000; opacity: 1; }
+
+/* 結局 */
+#end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: #000; padding: 20px; text-align: center; }
+#endText { font-size: clamp(28px, 5vw, 52px); font-weight: 900; color: #fff; -webkit-text-stroke: 1px #000; max-width: 90vw; animation: inText 1s ease both; }
+#endSub { font-size: 18px; color: #aaa; }
+#endSub .clear { font-size: clamp(48px, 9vw, 90px); font-weight: 900; color: #ffd54a; -webkit-text-stroke: 3px #000; text-shadow: 6px 6px 0 #6b2a00; animation: inText .6s ease both; }
+#endSub .news { display: inline-block; font-size: clamp(16px, 2.4vw, 24px); font-weight: 900; color: #fff; background: #b3201a; padding: 6px 16px;
+  border: 3px solid #000; box-shadow: 5px 5px 0 #000; margin-bottom: 18px; transform: rotate(-1deg); animation: inText .5s ease both; }
+#endSub .unlock { margin-top: 10px; font-size: 20px; color: #5ff4ff; font-weight: 900; animation: inText .6s .4s ease both; }
+#end.nobtn #btnRestart { display: none; }
+#end.win #endText { font-size: clamp(22px, 3.6vw, 38px); }
+@keyframes inText { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+button { font-family: inherit; cursor: pointer; }
+#btnRestart, #btnStart { font-size: 24px; font-weight: 900; color: #000; background: #ffb21c; border: 4px solid #000; box-shadow: 6px 6px 0 #000; padding: 12px 34px; transform: skewX(-6deg); }
+#btnRestart:active, #btnStart:active { transform: skewX(-6deg) translate(3px, 3px); box-shadow: 3px 3px 0 #000; }
+
+/* 標題 */
+#title { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.title-bg { position: absolute; inset: 0; background: #111 url(../assets/title.jpg) center/cover no-repeat; }
+.title-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.15) 45%, rgba(0,0,0,.7) 100%); }
+.title-inner { position: relative; text-align: center; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: -6vh; }
+h1 { margin: 0; font-size: clamp(56px, 12vw, 130px); font-weight: 900; letter-spacing: 6px; color: #f6f1e4; -webkit-text-stroke: 4px #000; text-shadow: 8px 8px 0 #000; transform: rotate(-3deg) skewX(-6deg); }
+.tag-line { margin: 0; font-size: clamp(15px, 2.2vw, 22px); font-weight: 900; background: #000; color: #fff; padding: 4px 14px; transform: rotate(-1deg); }
+#badge { font-weight: 900; color: #001a1f; background: #5ff4ff; border: 3px solid #000; padding: 3px 12px; box-shadow: 4px 4px 0 #000; }
+#btnStart { margin-top: 10px; display: none; }
+body.ready #btnStart { display: inline-block; }
+body.ready #loadMsg { display: none; }
+.small { font-size: 14px; color: #ccc; }
+.help { font-size: 13px; color: #e2ddd0; background: rgba(0,0,0,.6); padding: 8px 14px; line-height: 1.7; max-width: 90vw; }
+body.touch .help-key { display: none; }
+body:not(.touch) .help-touch { display: none; }
+.link { background: none; border: 0; color: #aaa; text-decoration: underline; font-size: 13px; }
+
+#pause, #rotate { position: absolute; inset: 0; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; text-align: center; font-size: 30px; font-weight: 900; z-index: 50; }
+#rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
+
+@media (max-height: 430px) {
+  .hud-box b { font-size: 20px; }
+  .cbtn { width: 78px; height: 78px; }
+  .cbtn.gas { width: 88px; height: 88px; }
+  #btnPeek { width: 96px; height: 96px; }
+  .cbtn.fire { width: 96px; height: 96px; bottom: 104px; right: 20px; }
+  h1 { font-size: 60px; }
+  .help { font-size: 12px; }
+}
+
+/* 儀表板時速指針、平安符 */
+#charm { position: absolute; left: 72.71%; top: 11.56%; width: 5.417%; height: 19.08%; transform-origin: 48% 0; pointer-events: none; }
+#needle { position: absolute; left: 69.25%; top: 44.6%; width: 3.1%; height: 0.42%; background: #ff3b22; border-radius: 2px;
+  transform-origin: 0 50%; box-shadow: 0 0 2px #000; margin-top: -0.21%; }
+#hub { position: absolute; left: 69.25%; top: 44.6%; width: 0.75%; height: 1.25%; margin: -0.625% 0 0 -0.375%; border-radius: 50%; background: #2c2727; border: 2px solid #111; }
+#lcd { position: absolute; left: 69.25%; top: 42.3%; transform: translate(-50%, -50%); font-family: "Courier New", monospace; font-weight: 900;
+  color: #ffb24a; background: #120d0c; padding: 0 0.35em; border: 1px solid #000; text-shadow: 0 0 4px #ff8a00; letter-spacing: 1px; }
+#gunPick { display: flex; gap: 10px; align-items: center; font-weight: 900; background: rgba(0,0,0,.6); padding: 6px 12px; }
+#gunPick button { font: inherit; font-size: 18px; padding: 6px 16px; border: 3px solid #000; background: #ddd; color: #000; box-shadow: 3px 3px 0 #000; }
+#gunPick button.on { background: #ffb21c; }
+#gunPick button[data-gun="laser"].on { background: #5ff4ff; }
