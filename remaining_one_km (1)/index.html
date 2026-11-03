@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>剩下一公里</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js" } }</script>
+</head>
+<body>
+<div id="app">
+  <div id="view">
+    <canvas id="c"></canvas>
+    <div id="ckwrap"><img id="cockpit" src="assets/cockpit.webp" alt=""><img id="charm" src="assets/charm.png" alt=""><div id="needle"></div><div id="hub"></div><div id="lcd">0</div><div id="ckleft"></div><div id="ckfloor"></div></div>
+    <img id="peekfg" src="assets/peek_fg.webp" alt="">
+    <img id="hand" src="assets/hand_pistol.webp" alt="">
+    <div id="muzzle"></div>
+  </div>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+  <div id="tags"></div>
+  <div id="fx"></div>
+  <img id="crosshair" src="assets/crosshair.png" alt="">
+
+  <div id="hud" class="hidden">
+    <div class="hud-box"><span class="lbl">距離出口</span><b id="dist">1000</b><span class="u">公尺</span></div>
+    <div class="hud-box"><b id="speed">0</b><span class="u">km/h</span></div>
+    <div class="hud-box"><span class="lbl">被插隊</span><b id="cuts">0/3</b></div>
+    <div class="hud-box"><span class="lbl">撞車</span><b id="crashes">0/2</b></div>
+  </div>
+  <div id="warn" class="hidden">車距太近！</div>
+  <div id="toast"></div>
+  <div id="subtitle"></div>
+  <div id="bigText"></div>
+
+  <div id="controls" class="hidden">
+    <div class="pad left">
+      <button id="btnPeek" class="cbtn"><img src="assets/btn_peek.png" alt=""><span>探頭</span></button>
+    </div>
+    <div class="pad right">
+      <button id="btnFire" class="cbtn fire"><img src="assets/btn_fire.png" alt=""><span>射擊</span></button>
+      <button id="btnBrake" class="cbtn"><img src="assets/btn_brake.png" alt=""><span>煞車</span></button>
+      <button id="btnGas" class="cbtn gas"><img src="assets/btn_gas.png" alt=""><span>油門</span></button>
+    </div>
+  </div>
+  <div id="keysHint" class="hidden"><b>W</b> 油門　<b>S</b> 煞車　按住 <b>Shift</b> 探頭　<b>滑鼠</b> 瞄準　<b>左鍵</b> 射擊</div>
+  <button id="btnSkip" class="hidden">跳過 ▶</button>
+
+  <div id="closeup"><img id="closeupImg" src="assets/headshot.jpg" alt=""></div>
+  <div id="panel"><img id="panelImg" alt=""></div>
+  <div id="flash"></div>
+  <div id="fade"></div>
+
+  <div id="end" class="hidden">
+    <div id="endText"></div>
+    <div id="endSub"></div>
+    <button id="btnRestart">重新開始</button>
+  </div>
+
+  <div id="title">
+    <div class="title-bg"></div>
+    <div class="title-inner">
+      <h1>剩下一公里</h1>
+      <p class="tag-line">交流道前一公里，誰都別想插我的隊。</p>
+      <div id="badge" class="hidden">已解鎖新武器</div>
+      <div id="gunPick" class="hidden"><span>選擇武器：</span><button data-gun="pistol">手槍</button><button data-gun="laser">雷射槍</button><button data-gun="grenade" class="hidden">手榴彈</button></div>
+      <button id="btnStart">開始遊戲</button>
+      <p id="loadMsg" class="small">載入中……</p>
+      <div class="help">
+        <div class="help-touch">手機：右下 油門／煞車　左下 按住探頭　拖曳畫面瞄準、按射擊</div>
+        <div class="help-key">電腦：W 油門　S 煞車　按住 Shift 探頭　滑鼠瞄準、左鍵射擊</div>
+        <div>被插隊 3 次或撞到前車 2 次就結束。通關 1 次解鎖雷射槍、2 次解鎖手榴彈。打中插隊車駕駛的頭可以阻止插隊。</div>
+      </div>
+      <button id="btnClear" class="link hidden">清除通關紀錄</button>
+    </div>
+  </div>
+
+  <div id="pause" class="hidden"><div>已暫停<br><small>點一下繼續</small></div></div>
+  <div id="rotate"><div>請將手機轉為橫向</div></div>
+</div>
+<script>
+// 防止手機連點兩下放大、雙指縮放
+(function () {
+  var last = 0;
+  document.addEventListener('touchend', function (e) {
+    var now = Date.now();
+    if (now - last < 400) e.preventDefault();
+    last = now;
+  }, { passive: false });
+  document.addEventListener('dblclick', function (e) { e.preventDefault(); }, { passive: false });
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) {
+    document.addEventListener(t, function (e) { e.preventDefault(); }, { passive: false });
+  });
+  document.addEventListener('touchmove', function (e) { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
+})();
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
