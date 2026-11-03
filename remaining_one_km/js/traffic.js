@@ -105,10 +105,13 @@ export class Traffic {
       if (e.isPlayer || e.frozen) continue;
       const lead = l0[i - 1];
       let acc;
+      // 出口前最後 300 公尺的車陣：塞到平均約 15 km/h
+      const jam = ctx.hard && e.s < CFG.EXIT_S && e.s > P.s;
+      const v0 = jam ? e.v0 * (5.2 / 11.75) : (e.role === 'rear' ? 12 : e.v0);
       if (!lead) {
-        acc = e.s > CFG.EXIT_S ? idm(e.v, 13, 999, 0) : clamp((this.leaderTarget - e.v) * 0.8, -3, 1.4);
+        acc = e.s > CFG.EXIT_S ? idm(e.v, 13, 999, 0) : clamp(((jam ? Math.min(this.leaderTarget, 5.2) : this.leaderTarget) - e.v) * 0.8, -3, 1.4);
       } else {
-        acc = idm(e.v, e.role === 'rear' ? 12 : e.v0, lead.s - e.s - L, e.v - lead.v);
+        acc = idm(e.v, v0, lead.s - e.s - L, e.v - lead.v);
       }
       if (e.tap > 0) { e.tap -= dt; acc = Math.min(acc, -4.2); }
       acc = Math.max(acc, -9);
@@ -177,6 +180,8 @@ export class Traffic {
   updateCutter(e, dt, ctx, F, busy) {
     const P = ctx.P;
     e.life += dt;
+    // 進入最後 300 公尺：所有插隊車都改成「閃一次就切」
+    if (ctx.hard && !e.hard && !e.scripted) { e.hard = true; e.blinksNeeded = 1; }
     let targetS;
     const gapPF = F ? F.s - P.s - L : 999;
     if (gapPF >= L + 1.0) targetS = Math.min((P.s + F.s) / 2, P.s + L + 5);
@@ -185,8 +190,22 @@ export class Traffic {
     if (waiting) targetS = P.s - 2.5;
     e.tight = gapPF < L + 1.0;
     if (e.state === 'approach') {
-      e.ctrlAcc = clamp(2.2 * (targetS - e.s) + 1.8 * (P.v - e.v), -6, 3.5);
-      if (!waiting && Math.abs(targetS - e.s) < 1.4 && Math.abs(e.v - P.v) < 2.0) { e.state = 'signal'; e.t = 0; e.blinkN = 0; }
+      // 先加速超過玩家，衝到空位前方約 10 公尺，再煞車降速退回空位
+      // 兩種插隊方式各半：A 原本的（從後面追上來直接打燈）、B 新的（先超車再減速插入）
+      if (e.over === undefined) {
+        e.style = Math.random() < 0.5 ? 'direct' : 'overtake';
+        e.over = e.hard ? rand(3, 5) : rand(6, 10);
+        if (e.style === 'direct') e.passed = true;
+      }
+      let tgt = targetS;
+      if (!e.passed && !waiting) {
+        tgt = targetS + e.over;
+        if (e.s > tgt - 1.5) e.passed = true;
+      }
+      const relV = e.passed || waiting ? 1.8 * (P.v - e.v) : 1.2 * (P.v + 6 - e.v);
+      e.ctrlAcc = clamp(2.2 * (tgt - e.s) + relV, -7, e.passed ? 3.5 : 6);
+      const tol = e.hard ? 3.0 : 1.4, tolV = e.hard ? 3.5 : 2.0;
+      if (!waiting && e.passed && Math.abs(targetS - e.s) < tol && Math.abs(e.v - P.v) < tolV) { e.state = 'signal'; e.t = 0; e.blinkN = 0; }
     } else if (e.state === 'signal') {
       e.ctrlAcc = clamp(2.2 * (targetS - e.s) + 1.8 * (P.v - e.v), -6, 3.5);
       e.t += dt;
@@ -194,13 +213,14 @@ export class Traffic {
       const on = ph < BLINK_ON;
       if (on && !e.blinkR) { this.hooks.tick(Math.abs(e.s - P.s)); e.blinkN++; }
       e.blinkR = on;
-      if (e.blinkN >= e.blinksNeeded && !on) { e.state = 'cutting'; e.p = 0; e.t = 0; }
+      // 一般：閃完 N 次、燈熄後才切；最後 300 公尺：燈一亮就同時切進來
+      if (e.hard ? e.blinkN >= 1 : (e.blinkN >= e.blinksNeeded && !on)) { e.state = 'cutting'; e.p = 0; e.t = e.hard ? ph : 0; }
     } else if (e.state === 'cutting') {
       e.t += dt;
       const on = (e.t % BLINK_P) < BLINK_ON;
       if (on && !e.blinkR) this.hooks.tick(Math.abs(e.s - P.s));
       e.blinkR = on;
-      let D = e.hard ? 1.35 : 2.2;
+      let D = e.hard ? 1.0 : 2.2;
       if (e.tight) D *= 1.4;
       e.p = Math.min(1, e.p + dt / D);
       e.x = lerp(CFG.LANE_X[1], 0, smooth(e.p));
@@ -244,9 +264,9 @@ export class Traffic {
     if (ctx.remaining < 60) return;
     this.cutTimer -= dt;
     if (this.cutTimer > 0) return;
-    const max = ctx.hard ? 3 : 2;
+    const max = 3;
     if (act.length >= max) return;
-    const sp = P.s - 28 - 16 * act.length;
+    const sp = P.s - 20 - 14 * act.length;
     const blocked = this.ents.some((e) => !e.dead && e.lane === 1 && e.s > sp - 9 && e.s < sp + 9 + (act.length ? 0 : 38));
     if (blocked) {
       // 左邊車道有車擋著：直接讓旁邊那台一般車變成插隊車
@@ -258,12 +278,12 @@ export class Traffic {
       }
       if (best && (ctx.hard || Math.random() < 0.5)) {
         Object.assign(best, { role: 'cutter', state: 'approach', blinksNeeded: ctx.hard ? 1 : 3, blinkN: 0, p: 0, hard: ctx.hard, scripted: false, life: 0, t: 0 });
-        this.cutTimer = ctx.hard ? rand(0.6, 1.2) : rand(2.0, 3.5);
+        this.cutTimer = ctx.hard ? rand(0.5, 1.0) : rand(1.2, 2.4);
       } else this.cutTimer = 0.4;
       return;
     }
     this.spawnCutter(P, { hard: ctx.hard, s: sp });
-    this.cutTimer = ctx.hard ? rand(0.6, 1.2) : rand(2.0, 3.5);
+    this.cutTimer = ctx.hard ? rand(0.5, 1.0) : rand(1.2, 2.4);
   }
 
   removeScripted() {

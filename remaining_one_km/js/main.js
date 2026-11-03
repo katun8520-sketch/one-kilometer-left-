@@ -105,6 +105,11 @@ function refreshTitle() {
   G.unlocked = G.clears >= 1;
   G.grenadeOK = G.clears >= GRENADE_CLEARS;
   G.openingSeen = loadOpeningSeen();
+  // 剛解鎖新武器：自動選最新的武器
+  if (G.clears !== lastClears) {
+    if (!userPicked || G.clears === GRENADE_CLEARS || G.clears === 1) gunChoice = G.grenadeOK ? 'grenade' : G.unlocked ? 'laser' : 'pistol';
+    lastClears = G.clears;
+  }
   applyWeapon();
   document.body.classList.toggle('unlocked', G.unlocked);
   ui.el.gunPick.classList.toggle('hidden', !G.unlocked);
@@ -179,8 +184,9 @@ function startGame() {
 
 // ---------- 選擇武器（只能在開始選單選）：通關 1 次解鎖雷射槍、3 次解鎖手榴彈 ----------
 let gunChoice = 'laser';
+let userPicked = false, lastClears = -1;
 document.querySelectorAll('#gunPick button').forEach((b) => b.addEventListener('click', () => {
-  gunChoice = b.dataset.gun; refreshGunPick();
+  gunChoice = b.dataset.gun; userPicked = true; refreshGunPick();
 }));
 function refreshGunPick() {
   document.querySelectorAll('#gunPick button').forEach((b) => {
