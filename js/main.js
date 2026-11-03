@@ -636,6 +636,15 @@ function handlePeek(dtR) {
   document.body.classList.toggle('peek', want);
   if (want && isTouch && !G.assistDone && player.peekT > 0.97) { G.assistDone = true; autoAim(); }
   G.slowT += dtR;
+  // 瞄準中只要有車正在打燈或切入，慢動作就一直維持，直到它插隊成功（或被打掉）
+  if (want) {
+    const busy = traffic.ents.some((e) => e.role === 'cutter' && (e.state === 'signal' || e.state === 'cutting'));
+    if (busy) {
+      if (G.slowT >= 2.8) { G.slowT = 0.3; audio.heartbeat(2); } // 慢動作已結束又有車要插：重新進入慢動作
+      else if (G.slowT > 2.2) G.slowT = 2.2;
+      G.lastSlow = G.clock;
+    }
+  }
   const t = G.slowT;
   G.timeScale = t < 0.3 ? lerp(1, 0.08, t / 0.3) : t < 2.3 ? 0.08 : t < 2.8 ? lerp(0.08, 1, (t - 2.3) / 0.5) : 1;
 }

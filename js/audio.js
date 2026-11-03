@@ -91,7 +91,7 @@ export class Sfx {
   }
   brake() {
     if (!this.ok) return;
-    if (this.playSample('brake', 0.9, 0.95 + Math.random() * 0.1)) return; // 使用者提供的煞車聲
+    if (this.playSample('brake', 0.45, 0.95 + Math.random() * 0.1)) return; // 使用者提供的煞車聲
     const t = this.t;
     const g = this.gainEnv(t, 0.02, 0.07, 0.5); const o = this.osc('sine', 2500, t, 0.55, g);
     o.frequency.linearRampToValueAtTime(2300, t + 0.5);
