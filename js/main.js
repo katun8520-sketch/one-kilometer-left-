@@ -1,6 +1,6 @@
 // 《剩下一公里》主程式：遊戲迴圈、狀態、射擊、過場
 import * as THREE from 'three';
-import { CFG, TEXT, clamp, lerp, smooth, loadCleared, saveCleared, clearSave } from './config.js';
+import { CFG, TEXT, clamp, lerp, smooth, rand, loadCleared, saveCleared, clearSave, loadClears, loadOpeningSeen, saveOpeningSeen, GRENADE_CLEARS } from './config.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import { Traffic } from './traffic.js';
@@ -9,8 +9,9 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { setInkTexture } from './cars.js';
 import { makeThug, walkPose, makeFist } from './characters.js';
-import { mergedGroup, part } from './toon.js';
+import { mergedGroup, part, canvasTex } from './toon.js';
 import { Cockpit } from './cockpit.js';
+import { Debris } from './debris.js';
 
 const ui = new UI();
 const input = new Input(document.getElementById('app'));
@@ -43,7 +44,7 @@ const G = {
   timeScale: 1, slowT: 99, lastSlow: -9, clock: 0, fireCD: 0, farT: 0, farCD: 0,
   hard: false, auto: true, stopCar: false, wasPeek: false, assistDone: false,
 };
-let world, player, traffic, bigThug, rearThug, fist, beam, thugSprite;
+let world, player, traffic, bigThug, rearThug, fist, beam, thugSprite, debris;
 let waits = [], tweens = [];
 const wait = (sec) => new Promise((res) => waits.push({ t: sec, res, tok: G.token }));
 const tween = (dur, fn, ease = smooth) => new Promise((res) => tweens.push({ t: 0, dur, fn, res, tok: G.token, ease }));
@@ -64,7 +65,11 @@ function tickTimers(dt) {
 const loader = new THREE.TextureLoader();
 let hasDoorImg = false;
 // 預先載入所有過場圖
+const HS_P = [1, 2, 3, 4, 5, 6].map((i) => `assets/hs_p${i}.jpg`);
+const HS_L = [1, 2, 3, 4, 5].map((i) => `assets/hs_l${i}.jpg`);
+const HS_G = [1, 2, 3, 4].map((i) => `assets/hs_g${i}.jpg`);
 const preloaded = [];
+for (const u of [...HS_P, ...HS_L, ...HS_G, 'assets/boom_text.png']) { const im = new Image(); im.src = u; preloaded.push(im); }
 for (const u of ['assets/door_open.jpg', 'assets/end_c.jpg', 'assets/end_d.jpg', 'assets/end_win.jpg', 'assets/headshot.jpg', 'assets/headshot_laser.jpg']) {
   const im = new Image();
   if (u.includes('door_open')) im.onload = () => { hasDoorImg = true; };
@@ -84,6 +89,7 @@ Promise.all([load('assets/city.jpg'), load('assets/sign_1km.jpg'), load('assets/
   rearThug = makeThug('rear');
   fist = makeFist();
   beam = makeBeam();
+  debris = new Debris(scene);
   G.laser = loadCleared();
   resetGame();
   ui.fade(0, 0);
@@ -95,8 +101,11 @@ Promise.all([load('assets/city.jpg'), load('assets/sign_1km.jpg'), load('assets/
 });
 
 function refreshTitle() {
-  G.unlocked = loadCleared();
-  G.laser = G.unlocked && gunChoice === 'laser';
+  G.clears = loadClears();
+  G.unlocked = G.clears >= 1;
+  G.grenadeOK = G.clears >= GRENADE_CLEARS;
+  G.openingSeen = loadOpeningSeen();
+  applyWeapon();
   document.body.classList.toggle('unlocked', G.unlocked);
   ui.el.gunPick.classList.toggle('hidden', !G.unlocked);
   refreshGunPick();
@@ -141,9 +150,12 @@ function resetGame() {
   thugSprite.removeFromParent(); thugSprite.material.opacity = 1;
   for (const o of [bigThug, rearThug]) { o.removeFromParent(); o.userData.upper.rotation.set(0, 0, 0); o.rotation.set(0, 0, 0); }
   fist.removeFromParent();
+  for (const g of grenades) { scene.remove(g.m); if (g.trailObj) scene.remove(g.trailObj); } grenades.length = 0;
+  for (const b of booms) scene.remove(b.sp); booms.length = 0;
+  debris.clear();
   player.reset(CFG.START_S);
   player.setGunType(G.laser);
-  cockpit.setGun(G.laser);
+  cockpit.setGun(G.weapon);
   traffic.reset(player);
   player.updatePose();
   ui.hideEnd(); ui.panel('', false); ui.hideTexts(); ui.bw(false); ui.warn(false);
@@ -155,7 +167,7 @@ function resetGame() {
 
 function startGame() {
   audio.init();
-  G.laser = G.unlocked && gunChoice === 'laser';
+  applyWeapon();
   try {
     if (isTouch && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
   } catch (e) {}
@@ -165,20 +177,28 @@ function startGame() {
   opening();
 }
 
-// ---------- 選擇武器（通關後才會出現，只能在開始選單選）----------
+// ---------- 選擇武器（只能在開始選單選）：通關 1 次解鎖雷射槍、3 次解鎖手榴彈 ----------
 let gunChoice = 'laser';
 document.querySelectorAll('#gunPick button').forEach((b) => b.addEventListener('click', () => {
   gunChoice = b.dataset.gun; refreshGunPick();
 }));
 function refreshGunPick() {
-  document.querySelectorAll('#gunPick button').forEach((b) => b.classList.toggle('on', b.dataset.gun === gunChoice));
+  document.querySelectorAll('#gunPick button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.gun === gunChoice);
+    if (b.dataset.gun === 'grenade') b.classList.toggle('hidden', !G.grenadeOK);
+  });
+}
+function applyWeapon() {
+  let w = G.unlocked ? gunChoice : 'pistol';
+  if (w === 'grenade' && !G.grenadeOK) w = 'laser';
+  G.weapon = w; G.laser = w === 'laser'; G.grenade = w === 'grenade';
 }
 
 // ---------- 開場 ----------
 async function opening() {
   G.state = 'opening'; G.mode = 'opening'; G.auto = true;
   ui.fade(1, 0); await wait(0.05); ui.fade(0, 1200);
-  ui.show('btnSkip', !!G.unlocked); // 第一輪不能跳過開場
+  ui.show('btnSkip', !!G.openingSeen); // 開場完整看過一次後才能跳過
   const sc = traffic.spawnCutter(player, { scripted: true, blinks: 3, s: player.s - 24, v: player.v + 4.5 });
   let w = 0;
   while (sc.state !== 'done' && !sc.dead && w < 11) { await wait(0.1); w += 0.1; }
@@ -194,11 +214,12 @@ async function opening() {
   await tween(1.8, (k) => player.setWindow(k), (k) => k);
   await wait(0.2);
   await tween(0.45, (k) => { player.extra.yaw = 0.55 * (1 - k); });
+  saveOpeningSeen(); G.openingSeen = true;
   startPlay();
 }
 
 function skipOpening() {
-  if (G.state !== 'opening' || !G.unlocked) return;
+  if (G.state !== 'opening' || !G.openingSeen) return;
   G.token++; waits = []; tweens = [];
   traffic.removeScripted();
   player.extra = { yaw: 0, pitch: 0, roll: 0 };
@@ -292,6 +313,7 @@ function physics(dt) {
 const ray = new THREE.Raycaster();
 function fire() {
   if (G.fireCD > 0) return;
+  if (G.grenade) { throwGrenade(); return; }
   G.fireCD = CFG.FIRE_CD;
   const ndc = input.ndc();
   ray.setFromCamera(ndc, camera); ray.far = 90;
@@ -307,7 +329,7 @@ function fire() {
       if (e) { traffic.kill(e); e.failT = 2.8; }
       audio.splat();
       ui.pow(input.aim.x, input.aim.y, G.laser);
-      ui.closeup(G.laser);
+      ui.closeup(G.laser ? HS_L : HS_P, G.laser ? 'laser' : '');
       if (G.laser) { ui.flash('rgba(120,255,255,0.35)', 200); }
     } else { audio.ding(); ui.spark(input.aim.x, input.aim.y); }
   }
@@ -319,6 +341,138 @@ function fire() {
   } else {
     world.flashLight.position.copy(m); world.flashLight.color.set(0xffc070); world.flashLight.intensity = 25;
   }
+}
+
+// ---------- 手榴彈 ----------
+const grenades = [], booms = [];
+let grenadeGeo = null, boomMat = null;
+function grenadeMesh() {
+  if (!grenadeGeo) grenadeGeo = () => mergedGroup([
+    part(new THREE.SphereGeometry(0.075, 10, 8), [0, 0, 0], null, 0x4f5c36),
+    part(new THREE.CylinderGeometry(0.03, 0.03, 0.05, 8), [0, 0.085, 0], null, 0x8a8f94),
+    part(new THREE.BoxGeometry(0.02, 0.1, 0.02), [0.04, 0.05, 0], [0, 0, -0.3], 0x8a8f94),
+  ], 0.008);
+  return grenadeGeo();
+}
+function boomSprite() {
+  if (!boomMat) {
+    const t = canvasTex(256, 256, (c, w, h) => {
+      const g = c.createRadialGradient(128, 128, 0, 128, 128, 128);
+      g.addColorStop(0, 'rgba(255,255,220,1)'); g.addColorStop(0.3, 'rgba(255,200,60,1)'); g.addColorStop(0.6, 'rgba(255,90,0,0.85)'); g.addColorStop(1, 'rgba(60,20,0,0)');
+      c.fillStyle = g; c.beginPath();
+      for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2, r = i % 2 ? 70 : 128; c.lineTo(128 + Math.cos(a) * r, 128 + Math.sin(a) * r); }
+      c.fill();
+    });
+    boomMat = new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  }
+  const sp = new THREE.Sprite(boomMat.clone());
+  return sp;
+}
+const ARC_H = 1.6;
+function grenadeAim() {
+  ray.setFromCamera(input.ndc(), camera); ray.far = 60;
+  const hits = ray.intersectObjects(traffic.targets(player), false);
+  let to;
+  if (hits.length) to = hits[0].point.clone();
+  else { // 沒打到車：落在準星方向的地面（最遠 30 公尺）
+    const d = ray.ray.direction;
+    const tg = d.y < -0.01 ? Math.min(30, (camera.position.y - 0.3) / -d.y) : 22;
+    to = ray.ray.at(tg, new THREE.Vector3());
+  }
+  to.y = Math.max(0.3, Math.min(to.y, 1.2));
+  const fwd = new THREE.Vector3(0.12, -0.12, -1).applyQuaternion(camera.quaternion);
+  const from = camera.position.clone().add(fwd.multiplyScalar(0.5));
+  return { from, to };
+}
+function arcPoint(from, to, k, out) {
+  out.lerpVectors(from, to, k);
+  out.y += 4 * ARC_H * k * (1 - k);
+  return out;
+}
+// 瞄準時的拋物線預覽與爆炸範圍
+let aimDots = null, aimRing = null;
+function makeAimGuide() {
+  const N = 26;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(N * 3), 3));
+  const dot = canvasTex(32, 32, (c) => { c.fillStyle = '#fff'; c.beginPath(); c.arc(16, 16, 11, 0, Math.PI * 2); c.fill(); c.strokeStyle = '#000'; c.lineWidth = 4; c.stroke(); });
+  aimDots = new THREE.Points(g, new THREE.PointsMaterial({ map: dot, size: 11, sizeAttenuation: false, transparent: true, depthTest: false, color: 0xffb070 }));
+  aimDots.renderOrder = 20; aimDots.frustumCulled = false; aimDots.visible = false;
+  const rg = new THREE.RingGeometry(7.1, 7.5, 48); rg.rotateX(-Math.PI / 2);
+  aimRing = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0xff7a20, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide }));
+  const inner = new THREE.Mesh(new THREE.CircleGeometry(7.1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff7a20, transparent: true, opacity: 0.12, depthWrite: false }));
+  aimRing.add(inner);
+  aimRing.visible = false;
+  scene.add(aimDots, aimRing);
+}
+function updateAimGuide() {
+  if (!aimDots) makeAimGuide();
+  const on = G.state === 'play' && G.grenade && player.peekT > 0.75;
+  aimDots.visible = aimRing.visible = on;
+  if (!on) return;
+  const { from, to } = grenadeAim();
+  const pos = aimDots.geometry.attributes.position, v = new THREE.Vector3();
+  const N = pos.count;
+  for (let i = 0; i < N; i++) { arcPoint(from, to, (i + 1) / N, v); pos.setXYZ(i, v.x, v.y, v.z); }
+  pos.needsUpdate = true;
+  aimRing.position.set(to.x, 0.06, to.z);
+  const ready = G.fireCD <= 0;
+  aimDots.material.color.set(ready ? 0xffb070 : 0x777777);
+  aimRing.material.opacity = ready ? 0.75 : 0.3;
+}
+function throwGrenade() {
+  G.fireCD = 1.3;
+  const { from, to } = grenadeAim();
+  const m = grenadeMesh(); m.position.copy(from); scene.add(m);
+  grenades.push({ m, from, to, t: 0, dur: clamp(from.distanceTo(to) / 20, 0.45, 0.9), trail: [] });
+  cockpit.fire('grenade'); audio.whoosh();
+}
+function updateGrenades(dt) {
+  for (let i = grenades.length - 1; i >= 0; i--) {
+    const g = grenades[i];
+    g.t += dt / g.dur;
+    const k = Math.min(1, g.t);
+    arcPoint(g.from, g.to, k, g.m.position);
+    if (!g.trailObj) {
+      const tg = new THREE.BufferGeometry();
+      tg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(40 * 3), 3));
+      g.trailObj = new THREE.Line(tg, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
+      g.trailObj.frustumCulled = false; scene.add(g.trailObj);
+    }
+    { const tp = g.trailObj.geometry.attributes.position, v = new THREE.Vector3(), N = tp.count;
+      for (let j = 0; j < N; j++) { arcPoint(g.from, g.to, Math.max(0, k - 0.35 + 0.35 * j / (N - 1)), v); tp.setXYZ(j, v.x, v.y, v.z); }
+      tp.needsUpdate = true; }
+    g.m.rotation.x += dt * 14; g.m.rotation.z += dt * 9;
+    if (k >= 1) { scene.remove(g.m); if (g.trailObj) scene.remove(g.trailObj); grenades.splice(i, 1); explode(g.to); }
+  }
+  for (let i = booms.length - 1; i >= 0; i--) {
+    const b = booms[i];
+    b.t += dt;
+    const k = b.t / 0.7;
+    b.sp.scale.setScalar(2 + 10 * Math.min(1, k * 2.5));
+    b.sp.material.opacity = Math.max(0, 1 - k);
+    if (k >= 1) { scene.remove(b.sp); booms.splice(i, 1); }
+  }
+}
+function explode(p) {
+  audio.boom();
+  const sp = boomSprite(); sp.position.copy(p); sp.position.y += 0.8; scene.add(sp);
+  booms.push({ sp, t: 0 });
+  world.flashLight.position.copy(p); world.flashLight.position.y += 1; world.flashLight.color.set(0xff8a30); world.flashLight.intensity = 160;
+  player.shakeAmp = Math.max(player.shakeAmp, 0.3);
+  let n = 0;
+  for (const e of traffic.active()) {
+    const c = e.car.group.position;
+    if (Math.hypot(c.x - p.x, c.z - p.z) < 7.5) {
+      traffic.kill(e); e.failT = 2.8; e.boom = 0; e.car.setColor(0x1c1a19); n++;
+      const away = new THREE.Vector3(c.x - p.x, 0, c.z - p.z); if (away.lengthSq() < 0.01) away.set(-1, 0, 0); away.normalize();
+      debris.burst(c, away);
+    }
+  }
+  const v = p.clone().project(camera);
+  if (v.z < 1) ui.pow((v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight, 'boom');
+  ui.flash('rgba(255,150,40,0.45)', 260);
+  if (n && HS_G.length) ui.closeup(HS_G, 'boom');
 }
 
 function autoAim() {
@@ -430,11 +584,13 @@ async function endingWin() {
   await wait(3);
   ui.fade(1, 1200); await wait(1.4); ui.panel('', false);
   audio.stopDrive();
+  const cl = loadClears();
+  const unlockMsg = cl === 1 ? '解鎖：雷射槍（回選單可選）' : cl === GRENADE_CLEARS ? '解鎖：手榴彈！（回選單可選）' : cl < GRENADE_CLEARS ? `通關 ${cl} 次。再通關 ${GRENADE_CLEARS - cl} 次解鎖手榴彈` : `通關 ${cl} 次`;
   ui.end(TEXT.win1, '', '', 'win nobtn');
   await wait(2.4);
   ui.el.endSub.innerHTML = `<div class="news">${TEXT.winNews}</div>`;
   await wait(2.8);
-  ui.el.endSub.innerHTML = `<div class="news">${TEXT.winNews}</div><div class="clear">${TEXT.win2}</div><div class="unlock">${G.laser ? '雷射槍模式通關！' : '第二輪解鎖：雷射槍模式'}</div>`;
+  ui.el.endSub.innerHTML = `<div class="news">${TEXT.winNews}</div><div class="clear">${TEXT.win2}</div><div class="unlock">${unlockMsg}</div>`;
   ui.el.btnRestart.textContent = '回選單（可選雷射槍）';
   ui.el.end.className = 'win';
 }
@@ -492,6 +648,8 @@ function frame(now) {
   if (G.state === 'opening' || G.state === 'play' || G.state === 'scene') {
     acc += dt; let n = 0;
     while (acc >= STEP && n < 8) { physics(STEP); acc -= STEP; n++; }
+    updateGrenades(dt);
+    debris.update(dt, -player.s);
     if (n >= 8) acc = 0;
   } else if (G.state === 'title') {
     // 標題畫面背景：車子緩慢前進
@@ -509,6 +667,7 @@ function frame(now) {
   world.flashLight.intensity *= Math.pow(0.0005, dtR);
   const ndc = input.ndc();
   player.updateCamera(dtR, player.peekT > 0 ? ndc : { x: 0, y: 0 });
+  updateAimGuide();
   world.update(camera);
   {
     const lastV = G.lastV;

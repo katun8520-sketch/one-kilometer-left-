@@ -73,6 +73,7 @@ body.peek:not(.touch) #app { cursor: none; }
 #crosshair { position: absolute; left: 0; top: 0; width: 72px; height: 72px; pointer-events: none; display: none; filter: drop-shadow(0 0 2px #000); }
 #fx { position: absolute; inset: 0; pointer-events: none; }
 .pow { position: absolute; width: 220px; height: 220px; margin: -110px 0 0 -110px; background: url(../assets/pow.png) center/contain no-repeat; animation: pow .85s ease-out forwards; }
+.pow.boom { background-image: url(../assets/boom_text.png); width: 340px; height: 340px; margin: -170px 0 0 -170px; }
 .pow.laser { filter: hue-rotate(160deg) saturate(3) drop-shadow(0 0 18px #4ff); width: 300px; height: 300px; margin: -150px 0 0 -150px; }
 @keyframes pow { 0% { transform: scale(.2) rotate(-12deg); opacity: 1 } 18% { transform: scale(1.15) rotate(4deg) } 30% { transform: scale(1) rotate(0) } 75% { opacity: 1 } 100% { transform: scale(1.08); opacity: 0 } }
 .spark { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: radial-gradient(#fff, #ffd060 40%, transparent 70%); animation: spark .3s ease-out forwards; }
@@ -165,3 +166,5 @@ body:not(.touch) .help-touch { display: none; }
 #gunPick button { font: inherit; font-size: 18px; padding: 6px 16px; border: 3px solid #000; background: #ddd; color: #000; box-shadow: 3px 3px 0 #000; }
 #gunPick button.on { background: #ffb21c; }
 #gunPick button[data-gun="laser"].on { background: #5ff4ff; }
+#gunPick button[data-gun="grenade"].on { background: #ff8a30; }
+#closeup.boom img { border-color: #ffd08a; box-shadow: 12px 12px 0 #000, 0 0 40px #ff7a00; }

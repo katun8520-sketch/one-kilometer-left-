@@ -37,11 +37,14 @@ export class UI {
     const f = this.el.fade; f.style.transition = `opacity ${ms}ms ease`; f.style.opacity = to;
   }
   bw(on) { this.el.view.classList.toggle('bw', on); }
-  closeup(laser) {
+  // 特寫：從清單隨機挑一張，不跟上一張重複；cls = 'laser' / 'boom' 等外框樣式
+  closeup(list, cls = '') {
     const c = this.el.closeup;
+    let i; do { i = (Math.random() * list.length) | 0; } while (list.length > 1 && list[i] === this._lastCU);
+    this._lastCU = list[i];
+    document.getElementById('closeupImg').src = list[i];
     c.className = ''; void c.offsetWidth;
-    document.getElementById('closeupImg').src = laser ? 'assets/headshot_laser.jpg' : 'assets/headshot.jpg';
-    c.className = 'show' + (laser ? ' laser' : '');
+    c.className = 'show' + (cls ? ' ' + cls : '');
     clearTimeout(this.timers.closeup);
     this.timers.closeup = setTimeout(() => { c.className = ''; }, 1150);
   }
@@ -53,7 +56,7 @@ export class UI {
   }
   pow(x, y, laser) {
     const d = document.createElement('div');
-    d.className = 'pow' + (laser ? ' laser' : '');
+    d.className = 'pow' + (laser === 'boom' ? ' boom' : laser ? ' laser' : '');
     d.style.left = x + 'px'; d.style.top = y + 'px';
     this.el.fx.appendChild(d);
     setTimeout(() => d.remove(), 900);

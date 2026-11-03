@@ -244,10 +244,10 @@ export class Traffic {
     if (ctx.remaining < 60) return;
     this.cutTimer -= dt;
     if (this.cutTimer > 0) return;
-    const max = ctx.hard ? 2 : 1;
+    const max = ctx.hard ? 3 : 2;
     if (act.length >= max) return;
-    const sp = P.s - 28;
-    const blocked = this.ents.some((e) => !e.dead && e.lane === 1 && e.s > sp - 9 && e.s < P.s + 10);
+    const sp = P.s - 28 - 16 * act.length;
+    const blocked = this.ents.some((e) => !e.dead && e.lane === 1 && e.s > sp - 9 && e.s < sp + 9 + (act.length ? 0 : 38));
     if (blocked) {
       // 左邊車道有車擋著：直接讓旁邊那台一般車變成插隊車
       let best = null;
@@ -256,14 +256,14 @@ export class Traffic {
         const d = Math.abs(e.s - (P.s + 3));
         if (d < 16 && (!best || d < Math.abs(best.s - (P.s + 3)))) best = e;
       }
-      if (best && ctx.hard) {
+      if (best && (ctx.hard || Math.random() < 0.5)) {
         Object.assign(best, { role: 'cutter', state: 'approach', blinksNeeded: ctx.hard ? 1 : 3, blinkN: 0, p: 0, hard: ctx.hard, scripted: false, life: 0, t: 0 });
-        this.cutTimer = ctx.hard ? rand(1.4, 2.6) : rand(4.5, 7.5);
+        this.cutTimer = ctx.hard ? rand(0.6, 1.2) : rand(2.0, 3.5);
       } else this.cutTimer = 0.4;
       return;
     }
-    this.spawnCutter(P, { hard: ctx.hard });
-    this.cutTimer = ctx.hard ? rand(1.4, 2.6) : rand(4.5, 7.5);
+    this.spawnCutter(P, { hard: ctx.hard, s: sp });
+    this.cutTimer = ctx.hard ? rand(0.6, 1.2) : rand(2.0, 3.5);
   }
 
   removeScripted() {
@@ -288,6 +288,15 @@ export class Traffic {
         c.group.position.set(e.x, 0, -e.s);
         c.group.rotation.y = e.yaw || 0;
       }
+      // 被手榴彈炸飛：整台翻一圈半，四輪朝天落地（車頂著地）
+      if (e.boom !== undefined) {
+        if (e.boom < 1) e.boom = Math.min(1, e.boom + dt / 1.2);
+        const k = e.boom;
+        const roll = Math.PI * (k < 1 ? k * k * (3 - 2 * k) : 1) * 3; // 翻 1.5 圈 → 停在上下顛倒
+        c.group.position.y = 1.47 * Math.min(1, k * 1.4) + Math.sin(Math.PI * k) * 2.8;
+        c.group.rotation.z = roll;
+        c.shadow.visible = false;
+      } else c.group.rotation.z = 0;
       c.group.visible = Math.abs(e.s - P.s) < 300;
       c.setBlink(!!e.blinkL, !!e.blinkR);
       c.setBrake(!!e.brake);

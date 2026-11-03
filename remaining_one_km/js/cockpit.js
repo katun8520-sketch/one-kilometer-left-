@@ -6,6 +6,7 @@ const $ = (id) => document.getElementById(id);
 const GUNS = {
   pistol: { src: 'assets/hand_pistol.webp', muzzle: [0.012, 0.079], pivot: [1, 1], aspect: 900 / 713 },
   laser: { src: 'assets/hand_laser.webp', muzzle: [0.03, 0.065], pivot: [1, 1], aspect: 900 / 638 },
+  grenade: { src: 'assets/hand_grenade.webp', muzzle: [0.35, 0.3], pivot: [1, 1], aspect: 1.3 },
 };
 
 export class Cockpit {
@@ -20,8 +21,12 @@ export class Cockpit {
     this.th = 0; this.om = 0;
     this.setGun(false);
   }
-  setGun(laser) {
-    this.gun = laser ? GUNS.laser : GUNS.pistol;
+  setGun(kind) {
+    if (kind === true) kind = 'laser'; else if (!kind) kind = 'pistol';
+    this.kind = kind;
+    this.gun = GUNS[kind] || GUNS.pistol;
+    this.hand.style.visibility = 'visible';
+    this.hand.onerror = () => { this.hand.style.visibility = 'hidden'; }; // 手榴彈手圖還沒到時先隱藏
     this.hand.src = this.gun.src;
   }
   // cam: { e（探頭進度 0~1）, yaw, pitch, roll, out（被拉出車外 0~1）, shake, fov, gunShow, aim:{x,y} }
@@ -90,6 +95,7 @@ export class Cockpit {
   }
   fire(laser) {
     this.recoil = 1;
+    if (laser === 'grenade') return;
     const fl = this.flash;
     fl.className = laser ? 'laser' : '';
     fl.style.left = this.muzzleX + 'px'; fl.style.top = this.muzzleY + 'px';

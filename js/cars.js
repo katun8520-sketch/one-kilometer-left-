@@ -167,6 +167,8 @@ export class Car {
     this.fallT = -1;
     this.ent = null;
     this.group.visible = true;
+    this.shadow.visible = true;
+    this.group.position.y = 0; this.group.rotation.z = 0;
     if (this.extraDoor) { this.group.remove(this.extraDoor); this.extraDoor = null; }
   }
   setBlink(l, r) { this.blinkL.visible = l; this.blinkR.visible = r; }

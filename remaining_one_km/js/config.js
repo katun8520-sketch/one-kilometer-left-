@@ -50,7 +50,14 @@ export const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const smooth = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
 
-const KEY = 'remaining1km_cleared';
-export function loadCleared() { try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; } }
-export function saveCleared() { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
-export function clearSave() { try { localStorage.removeItem(KEY); } catch (e) {} }
+const KEY = 'remaining1km_cleared';      // 通關次數
+const KEY_OP = 'remaining1km_opening';   // 開場是否完整看過
+const get = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const set = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+export function loadClears() { return parseInt(get(KEY) || '0', 10) || 0; }
+export function loadCleared() { return loadClears() > 0; }
+export function saveCleared() { set(KEY, String(loadClears() + 1)); }
+export function loadOpeningSeen() { return get(KEY_OP) === '1'; }
+export function saveOpeningSeen() { set(KEY_OP, '1'); }
+export function clearSave() { try { localStorage.removeItem(KEY); localStorage.removeItem(KEY_OP); } catch (e) {} }
+export const GRENADE_CLEARS = 3; // 通關 3 次解鎖手榴彈

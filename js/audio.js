@@ -144,6 +144,13 @@ export class Sfx {
     const g2 = this.gainEnv(t, 0.002, vol * 0.4, 0.12); const lp = this.filt('lowpass', 900); lp.connect(g2); const n = this.noise(); n.connect(lp); n.start(t); n.stop(t + 0.2);
   }
   punch() { this.thud(1); this.whoosh(); }
+  boom() {
+    if (!this.ok) return; const t = this.t;
+    const g = this.gainEnv(t, 0.005, 1.0, 1.4); const lp = this.filt('lowpass', 900); lp.connect(g);
+    lp.frequency.setValueAtTime(2400, t); lp.frequency.exponentialRampToValueAtTime(200, t + 1.2);
+    const n = this.noise(); n.connect(lp); n.start(t); n.stop(t + 1.5);
+    const g2 = this.gainEnv(t, 0.003, 1.0, 0.6); const o = this.osc('sine', 90, t, 0.7, g2); o.frequency.exponentialRampToValueAtTime(28, t + 0.6);
+  }
   step() { this.thud(0.35); }
   crash() {
     if (!this.ok) return; const t = this.t;
