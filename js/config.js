@@ -60,4 +60,4 @@ export function saveCleared() { set(KEY, String(loadClears() + 1)); }
 export function loadOpeningSeen() { return get(KEY_OP) === '1'; }
 export function saveOpeningSeen() { set(KEY_OP, '1'); }
 export function clearSave() { try { localStorage.removeItem(KEY); localStorage.removeItem(KEY_OP); } catch (e) {} }
-export const GRENADE_CLEARS = 3; // 通關 3 次解鎖手榴彈
+export const GRENADE_CLEARS = 2; // 通關 2 次（第三輪）解鎖手榴彈

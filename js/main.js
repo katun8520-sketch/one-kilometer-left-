@@ -105,6 +105,11 @@ function refreshTitle() {
   G.unlocked = G.clears >= 1;
   G.grenadeOK = G.clears >= GRENADE_CLEARS;
   G.openingSeen = loadOpeningSeen();
+  // 剛解鎖新武器：自動選最新的武器
+  if (G.clears !== lastClears) {
+    if (!userPicked || G.clears === GRENADE_CLEARS || G.clears === 1) gunChoice = G.grenadeOK ? 'grenade' : G.unlocked ? 'laser' : 'pistol';
+    lastClears = G.clears;
+  }
   applyWeapon();
   document.body.classList.toggle('unlocked', G.unlocked);
   ui.el.gunPick.classList.toggle('hidden', !G.unlocked);
@@ -146,7 +151,7 @@ function showBeam(a, b) {
 // ---------- 重新開始 ----------
 function resetGame() {
   G.token++; waits = []; tweens = [];
-  Object.assign(G, { crashes: 0, crashCD: 0, cuts: 0, hard: false, stopCar: false, auto: true, timeScale: 1, slowT: 99, farT: 0, farCD: 0, fireCD: 0, wasPeek: false, mode: 'opening' });
+  Object.assign(G, { navNext: 900, crashes: 0, crashCD: 0, cuts: 0, hard: false, stopCar: false, auto: true, timeScale: 1, slowT: 99, farT: 0, farCD: 0, fireCD: 0, wasPeek: false, mode: 'opening' });
   thugSprite.removeFromParent(); thugSprite.material.opacity = 1;
   for (const o of [bigThug, rearThug]) { o.removeFromParent(); o.userData.upper.rotation.set(0, 0, 0); o.rotation.set(0, 0, 0); }
   fist.removeFromParent();
@@ -167,6 +172,8 @@ function resetGame() {
 
 function startGame() {
   audio.init();
+  audio.loadBgm('assets/bgm.mp3');
+  audio.loadSample('brake', 'assets/sfx_brake.mp3');
   applyWeapon();
   try {
     if (isTouch && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
@@ -179,8 +186,9 @@ function startGame() {
 
 // ---------- 選擇武器（只能在開始選單選）：通關 1 次解鎖雷射槍、3 次解鎖手榴彈 ----------
 let gunChoice = 'laser';
+let userPicked = false, lastClears = -1;
 document.querySelectorAll('#gunPick button').forEach((b) => b.addEventListener('click', () => {
-  gunChoice = b.dataset.gun; refreshGunPick();
+  gunChoice = b.dataset.gun; userPicked = true; refreshGunPick();
 }));
 function refreshGunPick() {
   document.querySelectorAll('#gunPick button').forEach((b) => {
@@ -197,13 +205,16 @@ function applyWeapon() {
 // ---------- 開場 ----------
 async function opening() {
   G.state = 'opening'; G.mode = 'opening'; G.auto = true;
+  audio.playBgm(0.6);
   ui.fade(1, 0); await wait(0.05); ui.fade(0, 1200);
   ui.show('btnSkip', !!G.openingSeen); // 開場完整看過一次後才能跳過
+  // 導航語音：進入最後一公里排隊時
+  setTimeout(() => { if (G.state === 'opening') audio.navVoice('下交流道，剩一公里，請靠右行駛。'); }, 900);
   const sc = traffic.spawnCutter(player, { scripted: true, blinks: 3, s: player.s - 24, v: player.v + 4.5 });
   let w = 0;
   while (sc.state !== 'done' && !sc.dead && w < 11) { await wait(0.1); w += 0.1; }
   await wait(0.35);
-  ui.subtitle(TEXT.curse, 1800); audio.speak('幹');
+  ui.subtitle(TEXT.curse, 1800);
   await wait(1.0);
   await tween(0.6, (k) => { player.extra.pitch = -0.45 * k; });
   player.gunState = 1;
@@ -258,7 +269,7 @@ function physics(dt) {
   const F0 = traffic.frontOf(P);
   if (G.state === 'play') {
     let a = input.brake ? -CFG.BRAKE : input.gas ? CFG.ACC : -CFG.COAST;
-    if (input.brake && !G.wasBrake && P.v > 6) audio.brake();
+    if (input.brake && !G.wasBrake && P.v > 2.5) audio.brake();
     G.wasBrake = input.brake;
     P.v = clamp(P.v + a * dt, 0, CFG.MAX_V);
   } else if (G.stopCar) {
@@ -305,6 +316,13 @@ function physics(dt) {
   // 最後 300 公尺
   if (!G.hard && remaining <= CFG.HARD) {
     G.hard = true; ui.big(TEXT.hard + '！', 1800, 'hard'); audio.setHard(true); audio.horn(0.2, 0.08);
+  }
+  // 導航語音：每 100 公尺提示一次
+  if (G.navNext && remaining <= G.navNext) {
+    const zh = ['', '一', '兩', '三', '四', '五', '六', '七', '八', '九'][G.navNext / 100];
+    // 只有開場（1 公里）和 300 公尺念完整句子，其他只報距離
+    audio.navVoice(G.navNext === 300 ? '下交流道，剩三百公尺，請靠右行駛。' : `${zh}百公尺。`);
+    G.navNext -= 100;
   }
   if (P.s >= CFG.EXIT_S) endingWin();
 }
@@ -463,7 +481,12 @@ function explode(p) {
   let n = 0;
   for (const e of traffic.active()) {
     const c = e.car.group.position;
-    if (Math.hypot(c.x - p.x, c.z - p.z) < 7.5) {
+    // 車身（4.4×1.8 公尺的長方形）任何一部分碰到爆炸圈就算炸到
+    const yaw = e.car.group.rotation.y, cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const dx = p.x - c.x, dz = p.z - c.z;
+    const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+    const qx = Math.max(Math.abs(lx) - CFG.W / 2, 0), qz = Math.max(Math.abs(lz) - CFG.L / 2, 0);
+    if (Math.hypot(qx, qz) <= 7.5) {
       traffic.kill(e); e.failT = 2.8; e.boom = 0; e.car.setColor(0x1c1a19); n++;
       const away = new THREE.Vector3(c.x - p.x, 0, c.z - p.z); if (away.lengthSq() < 0.01) away.set(-1, 0, 0); away.normalize();
       debris.burst(c, away);
@@ -498,7 +521,7 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 async function endingC() {
   if (G.state !== 'play') return;
-  enterScene();
+  enterScene(); audio.stopBgm(1.5);
   G.stopCar = true; traffic.frozen = true;
   await wait(1.3);
   audio.horn(1.3, 0.3); await wait(1.6);
@@ -532,7 +555,7 @@ async function endingC() {
 // ---------- 結局 D：撞到前車 ----------
 async function endingD(F) {
   if (G.state !== 'play') return;
-  enterScene();
+  enterScene(); audio.stopBgm(0.4);
   audio.crash(); ui.flash('#fff', 160); player.shakeAmp = 0.3;
   player.v = 0; G.stopCar = true; traffic.frozen = true;
   F.frozen = true; F.v = 0; F.brake = true; F.tap = 0;

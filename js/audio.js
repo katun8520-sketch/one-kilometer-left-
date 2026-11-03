@@ -11,7 +11,7 @@ export class Sfx {
     this.envF = c.createBiquadFilter(); this.envF.type = 'lowpass'; this.envF.frequency.value = 18000;
     this.envG = c.createGain(); this.envF.connect(this.envG); this.envG.connect(this.master);
     this.sfx = c.createGain(); this.sfx.connect(this.master);
-    this.mus = c.createGain(); this.mus.gain.value = 0.55; this.mus.connect(this.envF);
+    this.mus = c.createGain(); this.mus.gain.value = 0.85; this.mus.connect(this.envF);
     const len = c.sampleRate * 2, b = c.createBuffer(1, len, c.sampleRate), d = b.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.noiseBuf = b;
@@ -90,7 +90,9 @@ export class Sfx {
     this.osc('square', 415, t, dur + 0.1, lp); this.osc('square', 523, t, dur + 0.1, lp);
   }
   brake() {
-    if (!this.ok) return; const t = this.t;
+    if (!this.ok) return;
+    if (this.playSample('brake', 0.9, 0.95 + Math.random() * 0.1)) return; // 使用者提供的煞車聲
+    const t = this.t;
     const g = this.gainEnv(t, 0.02, 0.07, 0.5); const o = this.osc('sine', 2500, t, 0.55, g);
     o.frequency.linearRampToValueAtTime(2300, t + 0.5);
   }
@@ -181,6 +183,25 @@ export class Sfx {
     if (!this.ok) return; const t = this.t;
     [523, 392].forEach((f, i) => { const g = this.gainEnv(t + i * 0.16, 0.01, 0.16, 0.25); this.osc('square', f, t + i * 0.16, 0.28, g); });
   }
+  // 像導航 App 的提示音＋語音
+  navVoice(text) {
+    this.duck(3.2);
+    if (this.ok) {
+      const t = this.t;
+      [[880, 0], [1175, 0.14]].forEach(([f, d]) => { const g = this.gainEnv(t + d, 0.01, 0.18, 0.35, this.master); this.osc('sine', f, t + d, 0.4, g); });
+    }
+    setTimeout(() => {
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'zh-TW'; u.rate = 1.0; u.pitch = 1.05; u.volume = 1;
+        const vs = speechSynthesis.getVoices();
+        const tw = vs.filter((v) => /zh[-_]TW/i.test(v.lang));
+        const pick = tw.find((v) => /Google|Mei-Jia|美佳|Ting|女/i.test(v.name)) || tw[0] || vs.find((v) => /^zh/i.test(v.lang));
+        if (pick) u.voice = pick;
+        speechSynthesis.cancel(); speechSynthesis.speak(u);
+      } catch (e) {}
+    }, 450);
+  }
   speak(text) {
     try {
       const u = new SpeechSynthesisUtterance(text);
@@ -189,13 +210,74 @@ export class Sfx {
     } catch (e) {}
   }
 
+  // ---- 外部音效檔 ----
+  loadSample(key, url) {
+    if (!this.ok) return;
+    this.samples = this.samples || {};
+    if (this.samples[key] !== undefined) return;
+    this.samples[key] = null;
+    fetch(url).then((r) => r.arrayBuffer())
+      .then((b) => new Promise((res, rej) => this.ctx.decodeAudioData(b, res, rej)))
+      .then((buf) => { this.samples[key] = buf; }).catch(() => { delete this.samples[key]; });
+  }
+  playSample(key, vol = 1, rate = 1) {
+    const buf = this.ok && this.samples && this.samples[key];
+    if (!buf) return false;
+    const src = this.ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate;
+    const g = this.ctx.createGain(); g.gain.value = vol;
+    src.connect(g); g.connect(this.sfx); src.start();
+    return true;
+  }
+
+  // ---- 背景音樂（Suno 歌曲，循環播放）----
+  loadBgm(url) {
+    if (!this.ok || this.bgmLoading) return;
+    this.bgmLoading = true;
+    fetch(url).then((r) => r.arrayBuffer())
+      .then((b) => new Promise((res, rej) => this.ctx.decodeAudioData(b, res, rej)))
+      .then((buf) => { this.bgmBuf = buf; if (this.bgmWant) this.playBgm(this.bgmWant); })
+      .catch(() => { this.bgmLoading = false; });
+  }
+  playBgm(vol = 0.35) {
+    this.bgmWant = vol;
+    if (!this.ok || !this.bgmBuf) return;
+    const t = this.t;
+    if (!this.bgmSrc) {
+      this.bgmG = this.ctx.createGain(); this.bgmG.gain.value = 0.0001; this.bgmG.connect(this.mus);
+      const src = this.ctx.createBufferSource(); src.buffer = this.bgmBuf; src.loop = true;
+      src.connect(this.bgmG); src.start(t);
+      this.bgmSrc = src;
+    }
+    this.bgmG.gain.cancelScheduledValues(t);
+    this.bgmG.gain.setTargetAtTime(vol, t, 0.6);
+  }
+  setBgmVol(vol, tc = 0.4) {
+    this.bgmWant = vol;
+    if (this.bgmG) { this.bgmG.gain.cancelScheduledValues(this.t); this.bgmG.gain.setTargetAtTime(vol, this.t, tc); }
+  }
+  stopBgm(fade = 1) {
+    this.bgmWant = 0;
+    if (!this.bgmSrc) return;
+    const src = this.bgmSrc, g = this.bgmG, t = this.t;
+    this.bgmSrc = null; this.bgmG = null;
+    g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(0.0001, t, fade / 4);
+    try { src.stop(t + fade + 0.1); } catch (e) {}
+  }
+  duck(sec = 3) { // 導航說話時音樂暫時變小聲
+    if (!this.bgmG) return;
+    const v = this.bgmWant, t = this.t;
+    this.bgmG.gain.cancelScheduledValues(t);
+    this.bgmG.gain.setTargetAtTime(v * 0.3, t, 0.15);
+    this.bgmG.gain.setTargetAtTime(v, t + sec, 0.5);
+  }
+
   // ---- 音樂 ----
   startTension() { this.music = { mode: 'tension', next: this.ok ? this.t + 0.2 : 0, bpm: 76, n: 0 }; }
-  setHard(on) { if (this.music && this.music.mode === 'tension') this.music.bpm = on ? 124 : 76; }
+  setHard(on) { if (this.music && this.music.mode === 'tension') this.music.bpm = on ? 124 : 76; if (on && this.bgmSrc) this.setBgmVol(0.8); }
   stopMusic() { this.music = null; }
   updateMusic() {
     const m = this.music;
-    if (!m || !this.ok || m.mode !== 'tension') return;
+    if (!m || !this.ok || m.mode !== 'tension' || this.bgmSrc) return;
     while (m.next < this.t + 0.15) {
       const t = m.next;
       const hard = m.bpm > 100;
@@ -212,6 +294,7 @@ export class Sfx {
   victory() {
     this.music = { mode: 'victory' };
     if (!this.ok) return;
+    if (this.bgmSrc) { this.setBgmVol(0.95, 1); return; } // 有背景音樂：通關時把歌放大聲
     const t0 = this.t + 0.1;
     const chords = [[261.6, 329.6, 392], [220, 261.6, 329.6], [174.6, 220, 261.6], [196, 246.9, 293.7], [261.6, 329.6, 392]];
     chords.forEach((ch, i) => {
