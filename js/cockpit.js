@@ -17,6 +17,7 @@ export class Cockpit {
     this.hand = $('hand');
     this.flash = $('muzzle');
     this.recoil = 0;
+    this.glass = $('ckglass'); this.winK = -1;
     this.charm = $('charm'); this.needle = $('needle'); this.lcd = $('lcd');
     this.th = 0; this.om = 0;
     this.setGun(false);
@@ -51,6 +52,9 @@ export class Cockpit {
     this.ck.style.transformOrigin = `${W / 2 - left}px ${H * 0.6}px`;
     this.ck.style.transform = `translate(${tx}px, ${ty}px) rotate(${-cam.roll}rad) scale(${sc})`;
     this.ck.style.opacity = String(1 - smooth((k - 0.4) / 0.45));
+    // 駕駛座車窗玻璃：0 = 關、1 = 全開（往下滑進車門）
+    const wk = cam.win || 0;
+    if (wk !== this.winK) { this.winK = wk; this.glass.style.transform = `translateY(${wk * 104}%)`; this.glass.style.display = wk > 0.99 ? 'none' : 'block'; }
     // 時速表指針（0～200 km/h，掃過約 230 度）與數字
     const kmh = Math.max(0, cam.kmh || 0);
     this.needle.style.transform = `rotate(${155 + Math.min(200, kmh) / 200 * 230}deg)`;

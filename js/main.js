@@ -630,7 +630,7 @@ function handlePeek(dtR) {
     audio.heartbeat(4); audio.muffle(true); ui.bw(true);
     G.assistDone = false;
   }
-  if (!want && G.wasPeek) { audio.muffle(false); ui.bw(false); if (G.slowT < 2.3) G.slowT = 2.3; }
+  if (!want && G.wasPeek) { audio.muffle(false); ui.bw(false); if (G.slowT < 3.5) G.slowT = 3.5; }
   G.wasPeek = want;
   player.peeking = want;
   document.body.classList.toggle('peek', want);
@@ -640,13 +640,13 @@ function handlePeek(dtR) {
   if (want) {
     const busy = traffic.ents.some((e) => e.role === 'cutter' && (e.state === 'signal' || e.state === 'cutting'));
     if (busy) {
-      if (G.slowT >= 2.8) { G.slowT = 0.3; audio.heartbeat(2); } // 慢動作已結束又有車要插：重新進入慢動作
-      else if (G.slowT > 2.2) G.slowT = 2.2;
+      if (G.slowT >= 4.0) { G.slowT = 0.3; audio.heartbeat(2); } // 慢動作已結束又有車要插：重新進入慢動作
+      else if (G.slowT > 3.4) G.slowT = 3.4;
       G.lastSlow = G.clock;
     }
   }
   const t = G.slowT;
-  G.timeScale = t < 0.3 ? lerp(1, 0.08, t / 0.3) : t < 2.3 ? 0.08 : t < 2.8 ? lerp(0.08, 1, (t - 2.3) / 0.5) : 1;
+  G.timeScale = t < 0.3 ? lerp(1, 0.08, t / 0.3) : t < 3.5 ? 0.08 : t < 4.0 ? lerp(0.08, 1, (t - 3.5) / 0.5) : 1;
 }
 
 function updateTags() {
@@ -712,7 +712,7 @@ function frame(now) {
       pitch: O ? O.pitch + 0.05 : player.extra.pitch,
       roll: O ? O.roll : player.extra.roll,
       shake: player.shakeAmp, fov: camera.fov, gunShow: player.gunShow, aim: input.aim,
-      kmh: player.v * 3.6, accel: (player.v - (G.lastV ?? player.v)) / Math.max(dtR, 1e-3),
+      win: player.windowOpen, kmh: player.v * 3.6, accel: (player.v - (G.lastV ?? player.v)) / Math.max(dtR, 1e-3),
     });
     G.lastV = player.v;
   }

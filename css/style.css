@@ -10,6 +10,8 @@ img { -webkit-user-drag: none; pointer-events: none; }
 #view.bw { filter: grayscale(1) contrast(1.18) brightness(.95); }
 #ckwrap, #peekfg, #hand { position: absolute; pointer-events: none; will-change: transform; }
 #ckwrap { }
+#ckglassclip { position: absolute; left: 8.9167%; top: 5.5014%; width: 44.5833%; height: 31.337%; overflow: hidden; }
+#ckglass { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; will-change: transform; }
 #cockpit { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
 #ckleft { position: absolute; right: calc(100% - 2px); top: 0; width: 120vw; height: 100%; background: #191415; }
 #ckfloor { position: absolute; left: -60%; width: 220%; top: calc(100% - 2px); height: 120vh;
